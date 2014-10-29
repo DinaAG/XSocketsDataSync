@@ -1,0 +1,123 @@
+﻿@{
+    ViewBag.Title = "XSockets DataSync";
+}
+@section scripts{
+<script>
+    // RealTime connection
+    var conn;
+    //Controller name
+    var syncName = 'fruits';
+
+    //Fruits ViewModel
+    var vm = {
+        fruits: ko.observableArray([]),
+        //Call data-sync controller to delete
+        tryRemove: function (f) {
+            deleteFruit(f);
+        },
+        //Call data-sync controller to update
+        tryUpdate: function (f) {
+            updateFruit(ko.toJS(f));
+        },
+        //Call data-sync controller to add
+        tryAdd: function () {
+            var name = $('#input-new-fruit').val();
+            if (name.length == 0) {
+                alert('You have to give the fruit a name');
+                return;
+            }
+            addFruit({ name: name });
+        },
+        //Add or update in VM
+        updatedFruit: function (m) {
+            m.Object.name = ko.observable(m.Object.name);
+            var match = ko.utils.arrayFirst(vm.fruits(), function (item) {
+                return m.Id === item.Id;
+            });
+
+            if (!match) {
+                //Add, did not exist
+                vm.fruits.unshift(m);
+            } else {
+                //Existed, udpate name....
+                match.Object.name(m.Object.name());
+            }
+        },
+        //Remove from VM
+        deletedFruit: function (m) {
+            vm.fruits.remove(function (item) { return item.Id == m.Id; });
+        }
+    }
+
+    $(function () {
+        //Enable knockoutjs
+        ko.applyBindings(vm);
+
+        //Open a full-duplex connection to the data-sync controller and pass in the topics (only one here)
+        conn = new XSockets.WebSocket('ws://' + location.host, [syncName], { topics: syncName });
+
+        //Loads oll persisted data when connected
+        conn.controller(syncName).on("init:" + syncName, function (d) {
+            for (var i = 0; i < d.length; i++) {
+                vm.updatedFruit(d[i]);
+            }
+        });
+        //Updated object
+        conn.controller(syncName).subscribe("update:" + syncName, function (d) {
+            vm.updatedFruit(d);
+        });
+        //Added object
+        conn.controller(syncName).subscribe("add:" + syncName, function (d) {
+            vm.updatedFruit(d);
+        });
+        //Deleted object
+        conn.controller(syncName).subscribe("delete:" + syncName, function (d) {
+            vm.deletedFruit(d);
+        });
+    });
+
+    //Sync Methods...
+    var addFruit = function (f) {
+        conn.controller(syncName).invoke('update', { Topic: syncName, Object: f });
+    };
+    var updateFruit = function (f) {
+        conn.controller(syncName).invoke('update', f);
+    };
+    var deleteFruit = function (f) {
+        conn.controller(syncName).invoke('delete', { Id: f.Id });
+    };
+</script>
+
+}
+<div class="well">
+    <h1>XSockets.NET</h1>
+    <p class="lead">XSockets.NET is the framework for building great real-time Web, Native, Desktop, IoT, WebRTC applications.</p>
+    <p><a href="http://xsockets.net/docs/4/getting-started-with-real-time" target="_blank" class="btn btn-primary btn-lg">Learn more &raquo;</a></p>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <h2>DataSync sample</h2>
+        <p>
+            This sample shows you how easy it is to synchronize data between clients in real-time.
+        </p>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-12">
+        <div>
+            Open up several browser windows to see data-sync in action.
+        </div>
+        <h4>New Fruit</h4>
+        <input type="text" id="input-new-fruit" /><button id="btn-new-fruit" data-bind="click:tryAdd">Add</button>
+        <hr />
+        <h4>Fruits</h4>
+        <div data-bind="foreach:fruits">
+            <div>
+                <input type="text" data-bind="value:Object.name" />
+                <button id="btn-del-fruit" data-bind="click:function(){$root.tryUpdate($data)}">Update</button>
+                <button id="btn-del-fruit" data-bind="click:function(){$root.tryRemove($data)}">Remove</button>
+            </div>
+        </div>
+    </div>
+</div>
